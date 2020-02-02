@@ -12712,8 +12712,9 @@ char* get_argument() {
 void set_argument(char* argv) {
   *selfie_argv = (uint64_t) argv;
 }
-
+//usage
 void print_usage() {
+  print("\n\n  **************************  Hello Hasnaa in selfie!  **************************\n\n");
   printf3("%s: usage: selfie { %s } [ %s ]\n", selfie_name,
     "-c { source } | -o binary | [ -s | -S ] assembly | -l binary | -sat dimacs",
     "( -m | -d | -r | -y | -min | -mob | -se | -mc ) 0-4096 ... ");

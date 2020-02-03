@@ -902,7 +902,7 @@ void emit_divu(uint64_t rd, uint64_t rs1, uint64_t rs2);
 void emit_remu(uint64_t rd, uint64_t rs1, uint64_t rs2);
 void emit_sltu(uint64_t rd, uint64_t rs1, uint64_t rs2);
 void emit_srl(uint64_t rd, uint64_t rs1, uint64_t rs2);
-void emit_ssl(uint64_t rd, uint64_t rs1, uint64_t rs2);
+void emit_sll(uint64_t rd, uint64_t rs1, uint64_t rs2);
 
 void emit_ld(uint64_t rd, uint64_t rs1, uint64_t immediate);
 void emit_sd(uint64_t rs1, uint64_t immediate, uint64_t rs2);
@@ -1365,6 +1365,8 @@ uint64_t BEQ   = 11;
 uint64_t JAL   = 12;
 uint64_t JALR  = 13;
 uint64_t ECALL = 14;
+//uint64_t SLL   = 15;
+//uint64_t SRL   = 16;
 
 // exceptions
 
@@ -3479,7 +3481,7 @@ uint64_t is_sll_or_srl() {
     return 1;
   else
     return 0;
-  
+
 }
 
 uint64_t look_for_factor() {
@@ -4144,6 +4146,7 @@ uint64_t compile_term() {
 }
 
 uint64_t compile_simple_expression() {
+
   uint64_t ltype;
   uint64_t operator_symbol;
   uint64_t rtype;
@@ -4156,6 +4159,7 @@ uint64_t compile_simple_expression() {
 
   // + or - ?
   while (is_plus_or_minus()) {
+
     operator_symbol = symbol;
 
     get_symbol();
@@ -4165,8 +4169,11 @@ uint64_t compile_simple_expression() {
     // assert: allocated_temporaries == n + 2
 
     if (operator_symbol == SYM_PLUS) {
+
       if (ltype == UINT64STAR_T) {
+
         if (rtype == UINT64_T)
+
           // UINT64STAR_T + UINT64_T
           // pointer arithmetic: factor of 2^3 of integer operand
           emit_left_shift_by(current_temporary(), 3);
@@ -4215,7 +4222,15 @@ uint64_t compile_simple_expression() {
   return ltype;
 }
 
-uint64_t compile_expression() {
+
+
+
+
+
+
+
+
+uint64_t compile_bitwise_expression() {
   uint64_t ltype;
   uint64_t operator_symbol;
   uint64_t rtype;
@@ -4226,13 +4241,110 @@ uint64_t compile_expression() {
 
   // assert: allocated_temporaries == n + 1
 
+  // >> or << ?
+
+  while (is_sll_or_srl()) {
+
+    operator_symbol = symbol;
+
+    get_symbol();
+
+    rtype = compile_simple_expression();
+
+    // assert: allocated_temporaries == n + 2
+
+
+
+    if (operator_symbol == SYM_SLL) {
+
+      if (ltype == UINT64STAR_T) {
+
+        if (rtype == UINT64_T) {
+
+          // UINT64STAR_T << UINT64_T
+          syntax_error_message("(uint64_t*) << (uint64_t) is undefined");
+
+        } else {
+
+          // UINT64STAR_T << UINT64STAR_T
+          syntax_error_message("(uint64_t*) << (uint64_t*) is undefined");
+
+          //ltype = UINT64_T;
+        }
+
+      } else if (rtype == UINT64STAR_T)
+
+        // UINT64_T << UINT64STAR_T
+        syntax_error_message("(uint64_t) << (uint64_t*) is undefined");
+
+      else
+
+        // UINT64_T << UINT64_T
+        emit_sll(previous_temporary(), previous_temporary(), current_temporary());
+    
+    } else if (operator_symbol == SYM_SRL) {
+
+      if (ltype == UINT64STAR_T) {
+
+        if (rtype == UINT64_T) {
+
+          // UINT64STAR_T >> UINT64_T
+          syntax_error_message("(uint64_t*) >> (uint64_t) is undefined");
+
+        } else {
+
+          // UINT64STAR_T - UINT64STAR_T
+         syntax_error_message("(uint64_t*) >> (uint64_t*) is undefined");
+
+          //ltype = UINT64_T;
+        }
+
+      } else if (rtype == UINT64STAR_T)
+
+        // UINT64_T >> UINT64STAR_T
+        syntax_error_message("(uint64_t) >> (uint64_t*) is undefined");
+
+      else
+
+        // UINT64_T >> UINT64_T
+        emit_srl(previous_temporary(), previous_temporary(), current_temporary());
+    }
+
+    tfree(1);
+  }
+
+  // assert: allocated_temporaries == n + 1
+
+  return ltype;
+}
+
+
+
+
+
+
+
+
+
+uint64_t compile_expression() {
+
+  uint64_t ltype;
+  uint64_t operator_symbol;
+  uint64_t rtype;
+
+  // assert: n = allocated_temporaries
+
+  ltype = compile_bitwise_expression();
+
+  // assert: allocated_temporaries == n + 1
+
   //optional: ==, !=, <, >, <=, >= simple_expression
   if (is_comparison()) {
     operator_symbol = symbol;
 
     get_symbol();
 
-    rtype = compile_simple_expression();
+    rtype = compile_bitwise_expression();
 
     // assert: allocated_temporaries == n + 2
 
@@ -5772,6 +5884,13 @@ void emit_sltu(uint64_t rd, uint64_t rs1, uint64_t rs2) {
   ic_sltu = ic_sltu + 1;
 }
 
+void emit_sll(uint64_t rd, uint64_t rs1, uint64_t rs2) {
+  emit_instruction(encode_r_format(F7_SLL, rs2, rs1, F3_SLL, rd, OP_OP));
+}
+void emit_srl(uint64_t rd, uint64_t rs1, uint64_t rs2) {
+  emit_instruction(encode_r_format(F7_SRL, rs2, rs1, F3_SRL, rd, OP_OP));
+}
+
 void emit_ld(uint64_t rd, uint64_t rs1, uint64_t immediate) {
   emit_instruction(encode_i_format(immediate, rs1, F3_LD, rd, OP_LD));
 
@@ -7174,6 +7293,23 @@ void do_sltu() {
   pc = pc + INSTRUCTIONSIZE;
 
   ic_sltu = ic_sltu + 1;
+}
+
+void do_sll() {
+  if (rd != REG_ZR)
+    // semantics of <<
+    *(registers + rd) = *(registers + rs1) << *(registers + rs2);
+
+  pc = pc + INSTRUCTIONSIZE;
+
+}
+void do_srl() {
+  if (rd != REG_ZR)
+    // semantics of >>
+    *(registers + rd) = *(registers + rs1) >> *(registers + rs2);
+
+  pc = pc + INSTRUCTIONSIZE;
+
 }
 
 void zero_extend_sltu() {
@@ -8780,7 +8916,7 @@ void decode() {
 
     if (funct3 == F3_SD)
       is = SD;
-  } else if (opcode == OP_OP) { // could be ADD, SUB, MUL, DIVU, REMU, SLTU
+  } else if (opcode == OP_OP) { // could be ADD, SUB, MUL, DIVU, REMU, SLTU, SLL, SRL
     decode_r_format();
 
     if (funct3 == F3_ADD) { // = F3_SUB = F3_MUL
@@ -8790,15 +8926,22 @@ void decode() {
         is = SUB;
       else if (funct7 == F7_MUL)
         is = MUL;
-    } else if (funct3 == F3_DIVU) {
+    } else if (funct3 == F3_DIVU) { // = F3_SRL
+
       if (funct7 == F7_DIVU)
         is = DIVU;
+      if (funct7 == F7_SRL)
+        do_srl();
+
     } else if (funct3 == F3_REMU) {
       if (funct7 == F7_REMU)
         is = REMU;
     } else if (funct3 == F3_SLTU) {
       if (funct7 == F7_SLTU)
         is = SLTU;
+    } else if (funct3 == F3_SLL) {
+      if (funct7 == F7_SLL)
+        do_sll();
     }
   } else if (opcode == OP_BRANCH) {
     decode_b_format();
@@ -9017,7 +9160,11 @@ void execute_symbolically() {
   else if (is == ADD) {
     constrain_add_sub_mul_divu_remu_sltu("bvadd");
     do_add();
-  } else if (is == SUB) {
+  }/* else if (is == SLL) {
+    do_sll();
+  } else if (is == SRL) {
+    do_srl();
+  } */else if (is == SUB) {
     constrain_add_sub_mul_divu_remu_sltu("bvsub");
     do_sub();
   } else if (is == MUL) {

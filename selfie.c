@@ -393,12 +393,14 @@ uint64_t SYM_LT           = 24; // <
 uint64_t SYM_LEQ          = 25; // <=
 uint64_t SYM_GT           = 26; // >
 uint64_t SYM_GEQ          = 27; // >=
+uint64_t SYM_SLL          = 28; // <<
+uint64_t SYM_SRL          = 39; // >>
 
 // symbols for bootstrapping
 
-uint64_t SYM_INT      = 28; // int
-uint64_t SYM_CHAR     = 29; // char
-uint64_t SYM_UNSIGNED = 30; // unsigned
+uint64_t SYM_INT      = 30; // int
+uint64_t SYM_CHAR     = 31; // char
+uint64_t SYM_UNSIGNED = 32; // unsigned
 
 uint64_t* SYMBOLS; // strings representing symbols
 
@@ -464,6 +466,8 @@ void init_scanner () {
   *(SYMBOLS + SYM_LEQ)          = (uint64_t) "<=";
   *(SYMBOLS + SYM_GT)           = (uint64_t) ">";
   *(SYMBOLS + SYM_GEQ)          = (uint64_t) ">=";
+  *(SYMBOLS + SYM_SLL)          = (uint64_t) "<<";
+  *(SYMBOLS + SYM_SRL)          = (uint64_t) ">>";
 
   *(SYMBOLS + SYM_INT)      = (uint64_t) "int";
   *(SYMBOLS + SYM_CHAR)     = (uint64_t) "char";
@@ -820,7 +824,7 @@ void     decode_u_format();
 uint64_t OP_LD     = 3;   // 0000011, I format (LD)
 uint64_t OP_IMM    = 19;  // 0010011, I format (ADDI, NOP)
 uint64_t OP_SD     = 35;  // 0100011, S format (SD)
-uint64_t OP_OP     = 51;  // 0110011, R format (ADD, SUB, MUL, DIVU, REMU, SLTU)
+uint64_t OP_OP     = 51;  // 0110011, R format (ADD, SUB, MUL, DIVU, REMU, SLTU, SLL, SRL)
 uint64_t OP_LUI    = 55;  // 0110111, U format (LUI)
 uint64_t OP_BRANCH = 99;  // 1100011, B format (BEQ)
 uint64_t OP_JALR   = 103; // 1100111, I format (JALR)
@@ -841,6 +845,8 @@ uint64_t F3_SD    = 3; // 011
 uint64_t F3_BEQ   = 0; // 000
 uint64_t F3_JALR  = 0; // 000
 uint64_t F3_ECALL = 0; // 000
+uint64_t F3_SLL   = 1; // 001
+uint64_t F3_SRL   = 5; // 101
 
 // f7-codes
 uint64_t F7_ADD  = 0;  // 0000000
@@ -849,6 +855,8 @@ uint64_t F7_SUB  = 32; // 0100000
 uint64_t F7_DIVU = 1;  // 0000001
 uint64_t F7_REMU = 1;  // 0000001
 uint64_t F7_SLTU = 0;  // 0000000
+uint64_t F7_SLL  = 0;  // 0000000
+uint64_t F7_SRL  = 0;  // 0000000
 
 // f12-codes (immediates)
 uint64_t F12_ECALL = 0; // 000000000000
@@ -893,6 +901,8 @@ void emit_mul(uint64_t rd, uint64_t rs1, uint64_t rs2);
 void emit_divu(uint64_t rd, uint64_t rs1, uint64_t rs2);
 void emit_remu(uint64_t rd, uint64_t rs1, uint64_t rs2);
 void emit_sltu(uint64_t rd, uint64_t rs1, uint64_t rs2);
+void emit_srl(uint64_t rd, uint64_t rs1, uint64_t rs2);
+void emit_ssl(uint64_t rd, uint64_t rs1, uint64_t rs2);
 
 void emit_ld(uint64_t rd, uint64_t rs1, uint64_t immediate);
 void emit_sd(uint64_t rs1, uint64_t immediate, uint64_t rs2);
@@ -1107,6 +1117,11 @@ void print_add_sub_mul_divu_remu_sltu(char *mnemonics);
 void print_add_sub_mul_divu_remu_sltu_before();
 
 void do_add();
+
+void do_sll();
+
+void do_srl();
+
 void constrain_add_sub_mul_divu_remu_sltu(char* operator);
 
 void do_sub();
@@ -1114,11 +1129,13 @@ void do_sub();
 void do_mul();
 
 void record_divu_remu();
+
 void do_divu();
 
 void do_remu();
 
 void do_sltu();
+
 void zero_extend_sltu();
 
 void     print_ld();
@@ -3125,14 +3142,17 @@ void get_symbol() {
         symbol = SYM_MOD;
 
       } else if (character == CHAR_EQUAL) {
-        get_character();
+            
+            get_character();
 
-        if (character == CHAR_EQUAL) {
-          get_character();
+            if (character == CHAR_EQUAL) {
+              
+              get_character();
+              symbol = SYM_EQUALITY;
 
-          symbol = SYM_EQUALITY;
-        } else
-          symbol = SYM_ASSIGN;
+            } else
+              symbol = SYM_ASSIGN;
+
 
       } else if (character == CHAR_EXCLAMATION) {
         get_character();
@@ -3145,24 +3165,52 @@ void get_symbol() {
         symbol = SYM_NOTEQ;
 
       } else if (character == CHAR_LT) {
+        
+
+
+
+
+
         get_character();
 
         if (character == CHAR_EQUAL) {
+          
           get_character();
-
           symbol = SYM_LEQ;
+
+        } else if (character == CHAR_LT) {
+
+          get_character();
+          symbol = SYM_SLL;
+
         } else
           symbol = SYM_LT;
 
+
+
+          
+
       } else if (character == CHAR_GT) {
+
+
+
         get_character();
 
         if (character == CHAR_EQUAL) {
+          
           get_character();
-
           symbol = SYM_GEQ;
+
+        } else if (character == CHAR_GT) {
+
+          get_character();
+          symbol = SYM_SRL;          
+
         } else
           symbol = SYM_GT;
+
+
+
 
       } else {
         print_line_number("syntax error", line_number);
@@ -3420,6 +3468,18 @@ uint64_t is_comparison() {
     return 1;
   else
     return 0;
+}
+
+
+uint64_t is_sll_or_srl() {
+
+  if (symbol == SYM_SLL)
+    return 1;
+  else if (symbol == SYM_SRL)
+    return 1;
+  else
+    return 0;
+  
 }
 
 uint64_t look_for_factor() {

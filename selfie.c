@@ -961,6 +961,8 @@ uint64_t ic_mul   = 0;
 uint64_t ic_divu  = 0;
 uint64_t ic_remu  = 0;
 uint64_t ic_sltu  = 0;
+uint64_t ic_sll  = 0;
+uint64_t ic_srl  = 0;
 uint64_t ic_ld    = 0;
 uint64_t ic_sd    = 0;
 uint64_t ic_beq   = 0;
@@ -1365,8 +1367,8 @@ uint64_t BEQ   = 11;
 uint64_t JAL   = 12;
 uint64_t JALR  = 13;
 uint64_t ECALL = 14;
-//uint64_t SLL   = 15;
-//uint64_t SRL   = 16;
+uint64_t SLL   = 15;
+uint64_t SRL   = 16;
 
 // exceptions
 
@@ -1778,6 +1780,8 @@ void model_mul();
 void model_divu();
 void model_remu();
 void model_sltu();
+void model_sll();
+void model_srl();
 
 uint64_t record_start_bounds(uint64_t offset, uint64_t activation_nid, uint64_t reg);
 uint64_t record_end_bounds(uint64_t offset, uint64_t activation_nid, uint64_t reg);
@@ -4253,8 +4257,6 @@ uint64_t compile_bitwise_expression() {
 
     // assert: allocated_temporaries == n + 2
 
-
-
     if (operator_symbol == SYM_SLL) {
 
       if (ltype == UINT64STAR_T) {
@@ -5714,6 +5716,8 @@ void reset_instruction_counters() {
   ic_divu  = 0;
   ic_remu  = 0;
   ic_sltu  = 0;
+  ic_sll   = 0;
+  ic_srl   = 0;
   ic_ld    = 0;
   ic_sd    = 0;
   ic_beq   = 0;
@@ -5723,7 +5727,7 @@ void reset_instruction_counters() {
 }
 
 uint64_t get_total_number_of_instructions() {
-  return ic_lui + ic_addi + ic_add + ic_sub + ic_mul + ic_divu + ic_remu + ic_sltu + ic_ld + ic_sd + ic_beq + ic_jal + ic_jalr + ic_ecall;
+  return ic_lui + ic_addi + ic_add + ic_sub + ic_mul + ic_divu + ic_remu + ic_sltu + ic_sll + ic_srl + ic_ld + ic_sd + ic_beq + ic_jal + ic_jalr + ic_ecall;
 }
 
 void print_instruction_counter(uint64_t total, uint64_t counter, char* mnemonics) {
@@ -5752,6 +5756,10 @@ void print_instruction_counters() {
 
   printf1("%s: compute: ", selfie_name);
   print_instruction_counter(ic, ic_add, "add");
+  print(", ");
+  print_instruction_counter(ic, ic_sll, "sll");
+  print(", ");
+  print_instruction_counter(ic, ic_srl, "srl");
   print(", ");
   print_instruction_counter(ic, ic_sub, "sub");
   print(", ");
@@ -5886,9 +5894,14 @@ void emit_sltu(uint64_t rd, uint64_t rs1, uint64_t rs2) {
 
 void emit_sll(uint64_t rd, uint64_t rs1, uint64_t rs2) {
   emit_instruction(encode_r_format(F7_SLL, rs2, rs1, F3_SLL, rd, OP_OP));
+
+  ic_sll = ic_sll + 1;
 }
+
 void emit_srl(uint64_t rd, uint64_t rs1, uint64_t rs2) {
   emit_instruction(encode_r_format(F7_SRL, rs2, rs1, F3_SRL, rd, OP_OP));
+
+  ic_srl = ic_srl + 1;
 }
 
 void emit_ld(uint64_t rd, uint64_t rs1, uint64_t immediate) {
@@ -7297,20 +7310,24 @@ void do_sltu() {
 
 void do_sll() {
   if (rd != REG_ZR)
-    // semantics of <<
-    *(registers + rd) = *(registers + rs1) << *(registers + rs2);
+    // semantics of sll
+    *(registers + rd) = left_shift(*(registers + rs1), *(registers + rs2));
 
   pc = pc + INSTRUCTIONSIZE;
 
+  ic_sll = ic_sll + 1;
 }
+
 void do_srl() {
   if (rd != REG_ZR)
-    // semantics of >>
-    *(registers + rd) = *(registers + rs1) >> *(registers + rs2);
+    // semantics of sll
+    *(registers + rd) = right_shift(*(registers + rs1), *(registers + rs2));
 
   pc = pc + INSTRUCTIONSIZE;
 
+  ic_srl = ic_srl + 1;
 }
+
 
 void zero_extend_sltu() {
   if (rd != REG_ZR)
@@ -8931,7 +8948,7 @@ void decode() {
       if (funct7 == F7_DIVU)
         is = DIVU;
       if (funct7 == F7_SRL)
-        do_srl();
+        is = SRL;
 
     } else if (funct3 == F3_REMU) {
       if (funct7 == F7_REMU)
@@ -8941,7 +8958,7 @@ void decode() {
         is = SLTU;
     } else if (funct3 == F3_SLL) {
       if (funct7 == F7_SLL)
-        do_sll();
+        is = SLL;
     }
   } else if (opcode == OP_BRANCH) {
     decode_b_format();
@@ -9013,6 +9030,10 @@ void execute() {
     do_remu();
   else if (is == SLTU)
     do_sltu();
+  else if (is == SLL)
+    do_sll();
+  else if (is == SRL)
+    do_srl();
   else if (is == BEQ)
     do_beq();
   else if (is == JAL)
@@ -9054,6 +9075,12 @@ void execute_record() {
   } else if (is == SLTU) {
     record_lui_addi_add_sub_mul_sltu_jal_jalr();
     do_sltu();
+  } else if (is == SLL) {
+    record_lui_addi_add_sub_mul_sltu_jal_jalr();
+    do_sll();
+  } else if (is == SRL) {
+    record_lui_addi_add_sub_mul_sltu_jal_jalr();
+    do_srl();
   } else if (is == BEQ) {
     record_beq();
     do_beq();
@@ -9122,6 +9149,14 @@ void execute_debug() {
   } else if (is == SLTU) {
     print_add_sub_mul_divu_remu_sltu_before();
     do_sltu();
+    print_addi_add_sub_mul_divu_remu_sltu_after();
+  } else if (is == SLL) {
+    print_add_sub_mul_divu_remu_sltu_before();
+    do_sll();
+    print_addi_add_sub_mul_divu_remu_sltu_after();
+  } else if (is == SRL) {
+    print_add_sub_mul_divu_remu_sltu_before();
+    do_srl();
     print_addi_add_sub_mul_divu_remu_sltu_after();
   } else if (is == BEQ) {
     print_beq_before();
@@ -10540,6 +10575,10 @@ void translate_to_assembler() {
     print_add_sub_mul_divu_remu_sltu("remu");
   else if (is == SLTU)
     print_add_sub_mul_divu_remu_sltu("sltu");
+  else if (is == SLL)
+    print_add_sub_mul_divu_remu_sltu("sll");
+  else if (is == SRL)
+    print_add_sub_mul_divu_remu_sltu("srl");
   else if (is == BEQ)
     print_beq();
   else if (is == JAL)
@@ -11026,6 +11065,61 @@ void model_sltu() {
   go_to_instruction(is, REG_ZR, pc, pc + INSTRUCTIONSIZE, 0);
 }
 
+
+
+void model_sll() {
+  if (rd != REG_ZR) {
+    reset_bounds();
+
+    // compute $rs1 << $rs2
+    printf3("%d sll 2 %d %d\n",
+      (char*) current_nid,       // nid of this line
+      (char*) (reg_nids + rs1),  // nid of current value of $rs1 register
+      (char*) (reg_nids + rs2)); // nid of current value of $rs2 register
+
+    // if this instruction is active set $rd = $rs1 < $rs2
+    printf4("%d ite 2 %d %d %d ; ",
+      (char*) (current_nid + 1),      // nid of this line
+      (char*) pc_nid(pcs_nid, pc),    // nid of pc flag of this instruction
+      (char*) current_nid,            // nid of $rs1 * $rs2
+      (char*) *(reg_flow_nids + rd)); // nid of most recent update of $rd register
+
+    *(reg_flow_nids + rd) = current_nid + 1;
+
+    print_add_sub_mul_divu_remu_sltu("sll");println();
+  }
+
+  go_to_instruction(is, REG_ZR, pc, pc + INSTRUCTIONSIZE, 0);
+}
+
+void model_srl() {
+  if (rd != REG_ZR) {
+    reset_bounds();
+
+    // compute $rs1 >> $rs2
+    printf3("%d srl 2 %d %d\n",
+      (char*) current_nid,       // nid of this line
+      (char*) (reg_nids + rs1),  // nid of current value of $rs1 register
+      (char*) (reg_nids + rs2)); // nid of current value of $rs2 register
+
+    // if this instruction is active set $rd = $rs1 < $rs2
+    printf4("%d ite 2 %d %d %d ; ",
+      (char*) (current_nid + 1),      // nid of this line
+      (char*) pc_nid(pcs_nid, pc),    // nid of pc flag of this instruction
+      (char*) current_nid,            // nid of $rs1 * $rs2
+      (char*) *(reg_flow_nids + rd)); // nid of most recent update of $rd register
+
+    *(reg_flow_nids + rd) = current_nid + 1;
+
+    print_add_sub_mul_divu_remu_sltu("srl");println();
+  }
+
+  go_to_instruction(is, REG_ZR, pc, pc + INSTRUCTIONSIZE, 0);
+}
+
+
+
+
 uint64_t record_start_bounds(uint64_t offset, uint64_t activation_nid, uint64_t reg) {
   if (check_block_access) {
     // if current instruction is active record lower bound on $reg register for checking address validity
@@ -11368,6 +11462,10 @@ void translate_to_model() {
     model_remu();
   else if (is == SLTU)
     model_sltu();
+  else if (is == SLL)
+    model_sll();
+  else if (is == SRL)
+    model_srl();
   else if (is == BEQ)
     model_beq();
   else if (is == JAL)

@@ -8947,7 +8947,7 @@ void decode() {
 
       if (funct7 == F7_DIVU)
         is = DIVU;
-      if (funct7 == F7_SRL)
+      else if (funct7 == F7_SRL)
         is = SRL;
 
     } else if (funct3 == F3_REMU) {
@@ -9195,11 +9195,13 @@ void execute_symbolically() {
   else if (is == ADD) {
     constrain_add_sub_mul_divu_remu_sltu("bvadd");
     do_add();
-  }/* else if (is == SLL) {
+  } else if (is == SLL) {
+    constrain_add_sub_mul_divu_remu_sltu("bvsll");
     do_sll();
   } else if (is == SRL) {
+    constrain_add_sub_mul_divu_remu_sltu("bvsrl");
     do_srl();
-  } */else if (is == SUB) {
+  } else if (is == SUB) {
     constrain_add_sub_mul_divu_remu_sltu("bvsub");
     do_sub();
   } else if (is == MUL) {
@@ -11077,11 +11079,11 @@ void model_sll() {
       (char*) (reg_nids + rs1),  // nid of current value of $rs1 register
       (char*) (reg_nids + rs2)); // nid of current value of $rs2 register
 
-    // if this instruction is active set $rd = $rs1 < $rs2
+    // if this instruction is active set $rd = $rs1 << $rs2
     printf4("%d ite 2 %d %d %d ; ",
       (char*) (current_nid + 1),      // nid of this line
       (char*) pc_nid(pcs_nid, pc),    // nid of pc flag of this instruction
-      (char*) current_nid,            // nid of $rs1 * $rs2
+      (char*) current_nid,            // nid of $rs1 << $rs2
       (char*) *(reg_flow_nids + rd)); // nid of most recent update of $rd register
 
     *(reg_flow_nids + rd) = current_nid + 1;
@@ -11102,11 +11104,11 @@ void model_srl() {
       (char*) (reg_nids + rs1),  // nid of current value of $rs1 register
       (char*) (reg_nids + rs2)); // nid of current value of $rs2 register
 
-    // if this instruction is active set $rd = $rs1 < $rs2
+    // if this instruction is active set $rd = $rs1 >> $rs2
     printf4("%d ite 2 %d %d %d ; ",
       (char*) (current_nid + 1),      // nid of this line
       (char*) pc_nid(pcs_nid, pc),    // nid of pc flag of this instruction
-      (char*) current_nid,            // nid of $rs1 * $rs2
+      (char*) current_nid,            // nid of $rs1 >> $rs2
       (char*) *(reg_flow_nids + rd)); // nid of most recent update of $rd register
 
     *(reg_flow_nids + rd) = current_nid + 1;
